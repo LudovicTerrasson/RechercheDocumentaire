@@ -6,8 +6,8 @@ Ce projet permet d'indexer et de rechercher des documents (PDF, DOCX, etc.) en u
 
 ETAPE 1 : Cloner le repository GitHub
 
-git clone <URL_DU_REPO>
-cd <NOM_DU_REPO>
+git clone https://github.com/LudovicTerrasson/RechercheDocumentaire.git
+cd RechercheDocumentaire
 
 ETAPE 2 : Exécuter le script d'installation
 
