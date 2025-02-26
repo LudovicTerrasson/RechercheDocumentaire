@@ -35,6 +35,27 @@ else
     echo "L'environnement virtuel existe déjà."
 fi
 
+# Vérification et installation de Tesseract
+if ! command -v tesseract &> /dev/null
+then
+    echo "Tesseract n'est pas installé. Installation de Tesseract..."
+    brew install tesseract
+else
+    echo "Tesseract est déjà installé."
+fi
+
+# Configuration de la variable d'environnement TESSDATA_PREFIX
+export TESSDATA_PREFIX=$(brew --prefix tesseract)/share/
+echo "La variable d'environnement TESSDATA_PREFIX a été définie sur : $TESSDATA_PREFIX"
+
+# Vérification de l'installation de Tesseract et du fichier de langue français
+if [ ! -f "$TESSDATA_PREFIX/tessdata/fra.traineddata" ]; then
+    echo "Le fichier de langue français (fra.traineddata) est manquant. Téléchargement..."
+    brew install tesseract-lang
+else
+    echo "Le fichier de langue français est déjà installé."
+fi
+
 # Activation de l'environnement virtuel
 source venv/bin/activate
 
