@@ -2,10 +2,12 @@ import fitz  # PyMuPDF pour PDF
 import os
 import requests
 from docx import Document
-from tkinter import Tk, filedialog, Button, Label, Entry, Listbox, Scrollbar, END, BOTH, RIGHT, Y, ttk, IntVar, Frame
+import tkinter as tk
+from tkinter import Tk, filedialog, Button, Label, Entry, Listbox, Scrollbar, END, BOTH, RIGHT, LEFT, Y, ttk, IntVar, Frame, Toplevel
 import pandas as pd
 import threading
 import time
+from datetime import datetime
 import pytesseract
 from pdf2image import convert_from_path
 import json
@@ -54,6 +56,64 @@ def extract_text_from_docx(docx_path):
 def extract_text_from_excel(excel_path):
     df = pd.read_excel(excel_path)
     return df.to_string(index=False)
+
+import json
+import time
+
+# Fonction pour enregistrer l'historique des indexations
+def save_indexation_history(stats, source_dir, elapsed_time, indexation_time):
+    # Créer un résumé de l'indexation
+    indexation_summary = {
+        "date": time.strftime(indexation_time),
+        "dossier": source_dir,
+        "nouveaux_documents": stats['new'],
+        "documents_inchanges": stats['unchanged'],
+        "documents_modifies": stats['modified'],
+        "documents_deplaces": stats['moved'],
+        "temps_total": elapsed_time 
+    }
+
+    # Charger l'historique existant, ou en créer un nouveau s'il n'existe pas
+    try:
+        with open('indexation_history.json', 'r') as f:
+            history = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        history = []
+
+    # Ajouter l'indexation à l'historique
+    history.append(indexation_summary)
+
+    # Sauvegarder l'historique mis à jour
+    with open('indexation_history.json', 'w') as f:
+        json.dump(history, f, indent=4)
+
+    print("✅ Historique des indexations mis à jour !")
+
+import json
+
+def display_indexation_history():
+    try:
+        with open('indexation_history.json', 'r') as f:
+            history = json.load(f)
+
+        history_listbox.delete(0, END)  # Vider la Listbox avant d'ajouter les nouvelles entrées
+        
+        for entry in reversed(history):
+            # Ajouter chaque ligne dans la Listbox séparément
+            history_listbox.insert(END, f"Indexation effectuée le {entry['date']}")
+            history_listbox.insert(END, f"- Dossier : {entry['dossier']}")
+            history_listbox.insert(END, f"- {entry['nouveaux_documents']} nouveaux documents indexés.")
+            history_listbox.insert(END, f"- {entry['documents_inchanges']} documents inchangés.")
+            history_listbox.insert(END, f"- {entry['documents_modifies']} documents modifiés.")
+            history_listbox.insert(END, f"- {entry['documents_deplaces']} documents déplacés.")
+            history_listbox.insert(END, f"- Temps total : {entry['temps_total']} secondes.")
+            history_listbox.insert(END, "")  # Ligne vide pour séparer les entrées
+            
+    except (FileNotFoundError, json.JSONDecodeError):
+        history_listbox.insert(END, "Aucune indexation enregistrée.")
+
+
+
 
 def index_document(file_path, progressbar, total_files, file_index, start_time, progress_label, stats):
     try:
@@ -144,6 +204,28 @@ def start_indexing(files_to_index, total_files, start_time):
     progressbar_label.config(text="Indexation terminée !")
     print("✅ Indexation terminée !")
 
+    elapsed_time = time.time() - start_time
+    indexation_time = datetime.now().strftime('%d/%m/%Y à %H:%M')
+    source_dir = os.path.dirname(files_to_index[0])
+
+
+    # Affichage supplémentaire du récapitulatif final à la fin de l'indexation
+    print(f"\nRésumé de l'indexation :")
+    print(f"🗓️ Date de l'indexation : {indexation_time}")
+    print(f"📂 Dossier indexé : {source_dir}")
+    print(f"✅ Nouveaux fichiers indexés : {stats['new']}")
+    print(f"📁 Fichiers inchangés : {stats['unchanged']}")
+    print(f"🔄 Fichiers modifiés : {stats['modified']}")
+    print(f"📂 Fichiers déplacés : {stats['moved']}")
+    print(f"Temps total : {int(elapsed_time // 60)}m {int(elapsed_time % 60)}s")
+
+    # Sauvegarder l'historique une fois l'indexation terminée
+    save_indexation_history(stats, source_dir, elapsed_time, indexation_time)
+    # Afficher l'historique mis à jour
+    display_indexation_history()
+
+    
+
 # Fonction de recherche Solr
 def search_solr():
     keywords = [entry.get().strip() for entry in keyword_entries if entry.get().strip()]
@@ -153,9 +235,15 @@ def search_solr():
 
     # Vérifier si la case "Recherche floue" est cochée
     if is_fuzzy_search.get():
-        solr_query = " AND ".join([f'content:*{keyword}*' for keyword in keywords])  # Ajoute les wildcards
+        if is_or_search.get():  # Si la case "OU" est cochée
+            solr_query = " OR ".join([f'content:*{keyword}*' for keyword in keywords])  # Recherche avec OR
+        else:
+            solr_query = " AND ".join([f'content:*{keyword}*' for keyword in keywords])  # Recherche avec AND
     else:
-        solr_query = " AND ".join([f'content:"{keyword}"' for keyword in keywords])
+        if is_or_search.get():  # Si la case "OU" est cochée
+            solr_query = " OR ".join([f'content:"{keyword}"' for keyword in keywords])  # Recherche avec OR
+        else:
+            solr_query = " AND ".join([f'content:"{keyword}"' for keyword in keywords])  # Recherche avec AND
 
     search_url = SOLR_SEARCH_URL.format(f"{solr_query}&rows=9999")
     response = requests.get(search_url)
@@ -203,7 +291,13 @@ def add_keyword_entry():
     if len(keyword_entries) < 15:  # Limite à 15 mots-clés
         # Créer un nouvel champ de mot-clé
         new_entry = Entry(keyword_frame, width=50)
-        new_entry.pack(pady=2, padx=10, fill="x")  # Ajouter au bas de la frame
+
+        # Calculer la ligne et la colonne pour le nouvel élément
+        row = len(keyword_entries) // 3  # Calcule la ligne
+        column = len(keyword_entries) % 3  # Calcule la colonne
+
+        # Ajouter le champ dans la grille
+        new_entry.grid(row=row, column=column, padx=10, pady=2, sticky="ew")
 
         # Ajouter le nouvel champ à la liste
         keyword_entries.append(new_entry)  # Ajout à la fin de la liste
@@ -211,63 +305,202 @@ def add_keyword_entry():
         info_label.config(text="❌ Vous avez atteint le nombre maximum de 15 mots-clés.")
 
 
+# Fonction pour supprimer un champ de mot-clé
+def remove_keyword_entry():
+    if len(keyword_entries) > 3:
+        entry_to_remove = keyword_entries.pop()
+        entry_to_remove.destroy()  # Supprime le champ de l'interface
+    else:
+        info_label.config(text="❌ Vous devez conserver au moins 3 champs de mots-clés.")
+
+# Fonction pour afficher une info-bulle
+def show_info_message(message):
+    # Fenêtre popup pour afficher les détails
+    top = Toplevel()
+    top.title("Information")
+    top.geometry("400x250")
+    
+    label = Label(top, text=message, wraplength=280, justify="left")
+    label.pack(pady=20)
+    
+    button = Button(top, text="Fermer", command=top.destroy)
+    button.pack()
 
 # Interface Tkinter
 root = Tk()
 root.title("Recherche et Indexation de Documents")
 
-root.columnconfigure(0, weight=1)
+root.columnconfigure(0, weight=1)  # Laisser la colonne s'étendre
+root.rowconfigure(0, weight=1)  # Laisser la première ligne s'étendre
 root.rowconfigure(1, weight=1)
+root.rowconfigure(2, weight=1)
+root.rowconfigure(3, weight=1)
+root.rowconfigure(4, weight=1)
+root.rowconfigure(5, weight=1)
+root.rowconfigure(6, weight=1)
+root.rowconfigure(7, weight=1)
+root.rowconfigure(8, weight=1)
+root.rowconfigure(9, weight=1)
+root.rowconfigure(10, weight=1)
+root.rowconfigure(11, weight=1)
+root.rowconfigure(12, weight=1)
 
-Label(root, text="Indexation de fichiers :").pack(pady=10)
-index_button = Button(root, text="Sélectionner un répertoire pour indexation", command=index_directory)
-index_button.pack(pady=10)
+# Indexation de fichiers label et bouton
+Label(root, text="Indexation de fichiers :").grid(row=0, column=0, pady=10, padx=10, sticky="nsew")
+button_frame = Frame(root)
+button_frame.grid(row=1, column=0, pady=10, padx=10)
 
+index_button = Button(button_frame, text="Sélectionner un répertoire pour indexation", command=index_directory)
+index_button.pack(padx=10, pady=10)  # pack() le centre automatiquement
+
+
+# Progressbar label et progressbar
 progressbar_label = Label(root, text="Sélectionner un dossier pour démarrer une nouvelle indexation")
-progressbar_label.pack(pady=10)
+progressbar_label.grid(row=2, column=0, pady=10, padx=10, sticky="nsew")
 progressbar = ttk.Progressbar(root, orient="horizontal", length=300, mode="determinate")
-progressbar.pack(pady=10)
+progressbar.grid(row=3, column=0, pady=10, padx=10, sticky="nsew")
 
-Label(root, text="Entrez jusqu'à 5 mots-clés pour la recherche :").pack(pady=10)
+# Créer un Frame pour contenir l'historique
+history_frame = Frame(root)
+history_frame.grid(row=4, column=0, padx=10, pady=10, sticky="nsew")  # Utilise grid ici
 
-# Création d'un Frame pour contenir les champs de mots-clés
+# Ajouter le label à la frame de l'historique
+Label(history_frame, text="Historique des indexations :").grid(row=0, column=0, pady=10, padx=10, sticky="nsew")
+
+# Configurer la grille pour que les éléments se développent
+root.grid_rowconfigure(0, weight=0)  # Laisser la ligne 4 (l'historique) s'étendre
+root.grid_columnconfigure(1, weight=1)  # Laisser la colonne 0 s'étendre
+
+history_listbox = tk.Listbox(history_frame, height=10, width=50)
+history_listbox.grid(row=1, column=0, sticky="nsew")  # Utiliser grid pour lier le listbox
+
+# Ajouter la scrollbar qui s'ajuste à la hauteur de la Listbox
+history_scrollbar = Scrollbar(history_frame, orient="vertical", command=history_listbox.yview)
+history_scrollbar.grid(row=1, column=1, sticky="ns")  # La scrollbar à droite
+history_listbox.config(yscrollcommand=history_scrollbar.set)
+
+# Centrer la Listbox et la scrollbar dans leur frame
+history_frame.grid_columnconfigure(0, weight=1)  # La colonne contenant la Listbox s'étend
+history_frame.grid_columnconfigure(1, weight=0)  # La colonne contenant la scrollbar ne s'étend pas
+history_frame.grid_rowconfigure(1, weight=1)  # Permettre à la ligne contenant les widgets de se développer
+
+
+# Entrée des mots-clés label
+Label(root, text="Entrez jusqu'à 5 mots-clés pour la recherche :").grid(row=5, column=0, pady=10, padx=10, sticky="nsew")
+
+# Création des champs de mots-clés dans un Frame
 keyword_frame = Frame(root)
-keyword_frame.pack(pady=10)
+keyword_frame.grid(row=6, column=0, pady=10, padx=10, sticky="nsew")
 
-# Création des 5 premiers champs de mots-clés
+# Création des 5 premiers champs de mots-clés et placement dans la grille
 keyword_entries = [Entry(keyword_frame, width=50) for _ in range(5)]
-for entry in keyword_entries:
-    entry.pack(pady=2, padx=10, fill="x")
+for i, entry in enumerate(keyword_entries):
+    row = i // 3  # Calcule la ligne
+    column = i % 3  # Calcule la colonne
+    entry.grid(row=row, column=column, padx=10, pady=2, sticky="nsew")
 
-# Ajouter un bouton pour permettre à l'utilisateur d'ajouter plus de champs de mots-clés
-add_button = Button(root, text="Ajouter un mot-clé", command=add_keyword_entry)
-add_button.pack(pady=5)
+# Configurer la colonne pour qu'elle s'étende proportionnellement
+for col in range(3):
+    keyword_frame.grid_columnconfigure(col, weight=1)
+
+# Frame pour les boutons "Ajouter" et "Supprimer" les mots-clés
+button_frame = Frame(root)
+button_frame.grid(row=7, column=0, pady=5, padx=10)
+
+# Sous-frame pour centrer les boutons
+inner_button_frame = Frame(button_frame)
+inner_button_frame.pack()
+
+# Ajouter un bouton pour permettre d'ajouter un mot-clé
+add_button = Button(inner_button_frame, text="Ajouter un mot-clé", command=add_keyword_entry)
+add_button.pack(side="left", padx=5, pady=5)
+
+# Bouton pour supprimer un mot-clé
+remove_button = Button(inner_button_frame, text="Supprimer un mot-clé", command=remove_keyword_entry)
+remove_button.pack(side="left", padx=5, pady=5)
+
+
+# Frame pour la case à cocher et le bouton "i"
+checkbox_frame = Frame(root)
+checkbox_frame.grid(row=8, column=0, pady=5, padx=10, sticky="ew")
+
+# Centrer le contenu du checkbox_frame
+checkbox_frame.grid_columnconfigure(0, weight=1)  # La colonne contenant la case à cocher s'étend pour centrer
+checkbox_frame.grid_columnconfigure(1, weight=1)  # La colonne contenant le bouton "i" s'étend également pour centrer
+checkbox_frame.grid_rowconfigure(0, weight=1)  # La ligne s'étend
 
 # Case à cocher pour activer/désactiver la recherche floue
 is_fuzzy_search = IntVar()
-fuzzy_search_checkbox = ttk.Checkbutton(root, text="Recherche floue", variable=is_fuzzy_search)
-fuzzy_search_checkbox.pack(pady=5)
+fuzzy_search_checkbox = ttk.Checkbutton(checkbox_frame, text="Recherche floue", variable=is_fuzzy_search)
+fuzzy_search_checkbox.grid(row=0, column=0, padx=5, sticky="e")  # Aligné à gauche mais dans une grille qui s'étend
 
-search_button = Button(root, text="Rechercher", command=search_solr)
-search_button.pack(pady=10)
+# Ajouter un petit "i" pour plus d'infos à côté de la case à cocher
+info_button = Button(checkbox_frame, text="i", command=lambda: show_info_message(
+         "La recherche floue permet de trouver, en plus des mots-clés exacts, les mots qui contiennent ces mots-clés.\n" "\nExemple : si vous cherchez 'chat', cela retournera 'chats', mais aussi 'achat', etc. " "Si vous cherchez 'Dupont', cela retournera également 'A.Dupont'."))
+info_button.grid(row=0, column=1, padx=5, pady=5, sticky="w")  # Aligné à droite mais dans une grille qui s'étend
 
+# Case à cocher pour activer/désactiver la recherche avec OU
+is_or_search = IntVar()
+or_search_checkbox = ttk.Checkbutton(checkbox_frame, text="Recherche avec OU", variable=is_or_search)
+or_search_checkbox.grid(row=1, column=0, padx=5, pady=5, sticky="e")  # La nouvelle case juste en dessous
+
+# Ajouter un petit "i" pour plus d'infos à côté de la case à cocher "Recherche avec OU"
+info_button_or = Button(checkbox_frame, text="i", command=lambda: show_info_message(
+         "La recherche avec 'OU' permet de trouver des documents qui contiennent au moins un des mots-clés.\n" "\nExemple : si vous cherchez 'chat' OU 'chien', cela retournera les documents contenant 'chat' ou 'chien', ou les deux."))
+info_button_or.grid(row=1, column=1, padx=5, pady=5, sticky="w")  # Aligné à droite de la nouvelle case à cocher
+
+
+
+
+# Bouton de recherche
+search_frame = Frame(root)
+search_frame.grid(row=9, column=0, pady=10, padx=10)
+
+search_button = Button(search_frame, text="Rechercher", command=search_solr)
+search_button.pack(padx=10, pady=10)
+
+
+# Label d'info
 info_label = Label(root, text="", fg="white")
-info_label.pack(pady=5)
+info_label.grid(row=10, column=0, pady=5, padx=10, sticky="nsew")
 
-result_frame = Listbox(root)
-result_frame.pack(fill=BOTH, expand=True, padx=10, pady=10)
+# Frame pour les résultats
+result_frame = Frame(root)
+result_frame.grid(row=11, column=0, padx=10, pady=10, sticky="nsew")  # Frame qui s'étend
 
+# Ajouter un label pour indiquer "Résultats :"
+Label(result_frame, text="Résultats :").grid(row=0, column=0, pady=10, padx=10, sticky="nsew")
+
+# Configurer la ligne et la colonne pour qu'elles s'étendent proportionnellement
+result_frame.grid_rowconfigure(0, weight=0)  # Le label ne doit pas prendre trop d'espace
+result_frame.grid_rowconfigure(1, weight=1)  # La listbox doit occuper l'espace restant
+
+# Scrollbar pour les résultats
 scrollbar = Scrollbar(result_frame, orient="vertical")
-scrollbar.pack(side=RIGHT, fill=Y)
 
+# Listbox pour les résultats
 result_listbox = Listbox(result_frame, yscrollcommand=scrollbar.set)
-result_listbox.pack(fill=BOTH, expand=True)
+result_listbox.grid(row=1, column=0, sticky="nsew")  # Étendre la Listbox dans la grille
+
+# Configurer la scrollbar pour la Listbox
+scrollbar.grid(row=1, column=1, sticky="ns")  # Scrollbar à droite
 scrollbar.config(command=result_listbox.yview)
 
-open_button = Button(root, text="Ouvrir fichier sélectionné", command=open_file)
-open_button.pack(pady=10)
+# Centrer la Listbox et la scrollbar
+result_frame.grid_columnconfigure(0, weight=1)  # Permettre à la première colonne de s'étendre
+result_frame.grid_columnconfigure(1, weight=0)  # La deuxième colonne (pour la scrollbar) ne doit pas s'étendre
+result_frame.grid_rowconfigure(0, weight=1)  # Permettre à la ligne de se développer
+
+
+open_frame = Frame(root)
+open_frame.grid(row=12, column=0, pady=10, padx=10)
+
+open_button = Button(open_frame, text="Ouvrir fichier sélectionné", command=open_file)
+open_button.pack(padx=10, pady=10)
+
 
 root.mainloop()
+
 
 
 
