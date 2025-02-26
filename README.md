@@ -16,6 +16,8 @@ cd RechercheDocumentaire
 
 ETAPE 2 : Exécuter le script d'installation
 
+chmod +x setup.sh
+
 ./setup.sh
 
 ETAPE 3 : Utilisation
