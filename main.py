@@ -8,15 +8,27 @@ import threading
 import time
 import pytesseract
 from pdf2image import convert_from_path
+import json
+
+def load_indexed_files():
+    if os.path.exists('indexed_files.json'):
+        with open('indexed_files.json', 'r') as f:
+            indexed_files_data = json.load(f)
+        return indexed_files_data
+    else:
+        return {}
+
+def save_indexed_files():
+    with open('indexed_files.json', 'w') as f:
+        json.dump(indexed_files, f, indent=4)
+
+indexed_files = load_indexed_files()
 
 SOLR_URL = "http://localhost:8983/solr/pdf_index/update?commit=true"
 SOLR_SEARCH_URL = "http://localhost:8983/solr/pdf_index/select?q={}"
 
 # Stocker les résultats pour ouvrir les fichiers
 search_results = []
-
-# Dictionnaire des fichiers indexés avec leur date de modification
-indexed_files = {}
 
 # Fonction pour extraire le texte d'un PDF
 def extract_text_from_pdf(pdf_path):
@@ -74,6 +86,7 @@ def index_document(file_path, progressbar, total_files, file_index, start_time, 
             if response.status_code == 200:
                 print(f"✅ Document indexé : {file_path}")
                 indexed_files[file_path] = last_modified
+                save_indexed_files() 
                 stats['new'] += 1
             else:
                 print(f"❌ Erreur d'indexation pour {file_path}: {response.status_code}")
@@ -179,11 +192,7 @@ def open_file():
             info_label.config(text=f"❌ Le fichier {file_path} n'existe pas.")
             return
 
-        # Ouvrir le fichier avec la méthode appropriée en fonction du système d'exploitation
-        if os.name == 'nt':  # Vérifie si le système est Windows
-            os.system(f'start "" "{file_path}"')  # Utilise 'start' sous Windows
-        else:  # macOS ou Linux
-            os.system(f'open "{file_path}"')  # Utilise 'open' sous macOS
+        os.system(f'open "{file_path}"')
     except IndexError:
         info_label.config(text="❌ Aucun fichier sélectionné.")
     except Exception as e:
@@ -200,6 +209,7 @@ def add_keyword_entry():
         keyword_entries.append(new_entry)  # Ajout à la fin de la liste
     else:
         info_label.config(text="❌ Vous avez atteint le nombre maximum de 15 mots-clés.")
+
 
 
 # Interface Tkinter
@@ -241,17 +251,23 @@ fuzzy_search_checkbox.pack(pady=5)
 search_button = Button(root, text="Rechercher", command=search_solr)
 search_button.pack(pady=10)
 
-info_label = Label(root, text="", fg="red")
-info_label.pack(pady=10)
+info_label = Label(root, text="", fg="white")
+info_label.pack(pady=5)
 
-result_listbox = Listbox(root, height=15, width=50)
-result_listbox.pack(pady=10)
+result_frame = Listbox(root)
+result_frame.pack(fill=BOTH, expand=True, padx=10, pady=10)
 
-open_button = Button(root, text="Ouvrir le fichier sélectionné", command=open_file)
+scrollbar = Scrollbar(result_frame, orient="vertical")
+scrollbar.pack(side=RIGHT, fill=Y)
+
+result_listbox = Listbox(result_frame, yscrollcommand=scrollbar.set)
+result_listbox.pack(fill=BOTH, expand=True)
+scrollbar.config(command=result_listbox.yview)
+
+open_button = Button(root, text="Ouvrir fichier sélectionné", command=open_file)
 open_button.pack(pady=10)
 
 root.mainloop()
-
 
 
 
