@@ -1,0 +1,6 @@
+pymupdf
+requests
+python-docx
+pandas
+pytesseract
+pdf2image
