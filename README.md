@@ -7,22 +7,17 @@ Ce projet permet d'indexer et de rechercher des documents (PDF, DOCX, etc.) en u
 ETAPE 1 : Cloner le repository GitHub
 
 git clone https://github.com/LudovicTerrasson/RechercheDocumentaire.git
+
 cd RechercheDocumentaire
 
 ETAPE 2 : Exécuter le script d'installation
 
 ./setup.sh
 
-Ce script :
-Vérifie et installe les dépendances nécessaires (Python, Java 8, Solr)
-Crée et active un environnement virtuel
-Installe les bibliothèques Python requises
-Installe et configure Apache Solr
-Crée un core Solr pour l'indexation des documents
-
 ETAPE 3 : Utilisation
 
 source venv/bin/activate
+
 python main.py
 
 FIN
