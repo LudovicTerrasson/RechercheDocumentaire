@@ -23,6 +23,28 @@ if (-Not (Test-Path "venv")) {
     Write-Host "L'environnement virtuel existe déjà."
 }
 
+# Vérification et installation de Tesseract
+if (-Not (Get-Command tesseract -ErrorAction SilentlyContinue)) {
+    Write-Host "Tesseract n'est pas installé. Téléchargement et installation..."
+    Invoke-WebRequest -Uri "https://github.com/UB-Mannheim/tesseract/wiki" -OutFile "tesseract_installer.exe"
+    Start-Process -Wait -FilePath "tesseract_installer.exe" -ArgumentList "/quiet"
+    Remove-Item "tesseract_installer.exe"
+} else {
+    Write-Host "Tesseract est déjà installé."
+}
+
+# Configuration de la variable d'environnement TESSDATA_PREFIX
+$env:TESSDATA_PREFIX = "C:\Program Files\Tesseract-OCR\"
+Write-Host "La variable d'environnement TESSDATA_PREFIX a été définie sur : $env:TESSDATA_PREFIX"
+
+# Vérification du fichier de langue français (fra.traineddata)
+if (-Not (Test-Path "$env:TESSDATA_PREFIX\tessdata\fra.traineddata")) {
+    Write-Host "Le fichier de langue français (fra.traineddata) est manquant. Téléchargement..."
+    Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata/raw/master/fra.traineddata" -OutFile "$env:TESSDATA_PREFIX\tessdata\fra.traineddata"
+} else {
+    Write-Host "Le fichier de langue français est déjà installé."
+}
+
 # Activation de l'environnement virtuel
 Write-Host "Activation de l'environnement virtuel..."
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
