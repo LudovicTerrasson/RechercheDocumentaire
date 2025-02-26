@@ -179,7 +179,11 @@ def open_file():
             info_label.config(text=f"❌ Le fichier {file_path} n'existe pas.")
             return
 
-        os.system(f'open "{file_path}"')
+        # Ouvrir le fichier avec la méthode appropriée en fonction du système d'exploitation
+        if os.name == 'nt':  # Vérifie si le système est Windows
+            os.system(f'start "" "{file_path}"')  # Utilise 'start' sous Windows
+        else:  # macOS ou Linux
+            os.system(f'open "{file_path}"')  # Utilise 'open' sous macOS
     except IndexError:
         info_label.config(text="❌ Aucun fichier sélectionné.")
     except Exception as e:
@@ -237,23 +241,17 @@ fuzzy_search_checkbox.pack(pady=5)
 search_button = Button(root, text="Rechercher", command=search_solr)
 search_button.pack(pady=10)
 
-info_label = Label(root, text="", fg="white")
-info_label.pack(pady=5)
+info_label = Label(root, text="", fg="red")
+info_label.pack(pady=10)
 
-result_frame = Listbox(root)
-result_frame.pack(fill=BOTH, expand=True, padx=10, pady=10)
+result_listbox = Listbox(root, height=15, width=50)
+result_listbox.pack(pady=10)
 
-scrollbar = Scrollbar(result_frame, orient="vertical")
-scrollbar.pack(side=RIGHT, fill=Y)
-
-result_listbox = Listbox(result_frame, yscrollcommand=scrollbar.set)
-result_listbox.pack(fill=BOTH, expand=True)
-scrollbar.config(command=result_listbox.yview)
-
-open_button = Button(root, text="Ouvrir fichier sélectionné", command=open_file)
+open_button = Button(root, text="Ouvrir le fichier sélectionné", command=open_file)
 open_button.pack(pady=10)
 
 root.mainloop()
+
 
 
 
