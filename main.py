@@ -685,7 +685,7 @@ Label(history_frame, text="Historique des indexations :").grid(row=0, column=0, 
 root.grid_rowconfigure(0, weight=0)  # Laisser la ligne 4 (l'historique) s'étendre
 root.grid_columnconfigure(1, weight=1)  # Laisser la colonne 0 s'étendre
 
-history_listbox = tk.Listbox(history_frame, height=5, width=50)
+history_listbox = tk.Listbox(history_frame, height=7, width=50)
 history_listbox.grid(row=1, column=0, sticky="nsew")  # Utiliser grid pour lier le listbox
 
 # Ajouter la scrollbar qui s'ajuste à la hauteur de la Listbox
